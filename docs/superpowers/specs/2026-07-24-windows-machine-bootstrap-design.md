@@ -101,6 +101,16 @@ and an explicit note that `apps/apps.json` and the `keyboard/` files are
 placeholders — the winget list and the actual SharpKeys/AutoHotkey files are
 filled in by the user after this initial scaffold.
 
+## Implementation note (deviation from the plan above)
+
+The `terminal` module does **not** symlink a repo-tracked `terminal/settings.json`
+as originally described. Windows Terminal auto-generates its real
+`settings.json` on first launch, including a machine-specific GUID for each
+detected WSL distro — a blind symlink-replace would wipe that out. Instead,
+`install.ps1 terminal` reads the live settings file, finds the profile named
+`Ubuntu`, sets `defaultProfile` to its GUID, and backs up the original before
+writing. No `terminal/` directory exists in the repo as a result.
+
 ## Out of scope for v1
 
 - Multiple git identities (work/personal split) on the Windows side.

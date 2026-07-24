@@ -65,8 +65,8 @@ windowsconfig/
 ```
 
 > **Still a placeholder:** `apps/apps.json` only lists `git`, `PowerShell 7`,
-> and `SharpKeys` so far; add the rest of your usual apps' winget package IDs
-> (`winget search <name>`) as you go.
+> `SharpKeys`, and `Beeftext` so far; add the rest of your usual apps' winget
+> package IDs (`winget search <name>`) as you go.
 
 ---
 

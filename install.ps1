@@ -54,16 +54,47 @@ function Invoke-Ssh {
     Read-Host 'Press Enter once the key has been added to GitHub to continue'
 }
 
+function Find-SharpKeysExe {
+    $searchDirs = @(
+        (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'),
+        (Join-Path $env:AppData 'Microsoft\Windows\Start Menu\Programs')
+    )
+    $shortcut = Get-ChildItem -Path $searchDirs -Recurse -Filter '*SharpKeys*.lnk' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $shortcut) { return $null }
+
+    $shell = New-Object -ComObject WScript.Shell
+    $link = $shell.CreateShortcut($shortcut.FullName)
+    if (Test-Path $link.TargetPath) { return $link.TargetPath }
+    return $null
+}
+
 function Invoke-Keyboard {
-    $regFile = Join-Path $RepoRoot 'keyboard\mac-layout.reg'
+    $sklFile = Join-Path $RepoRoot 'keyboard\mac-layout.skl'
     $ahkFile = Join-Path $RepoRoot 'keyboard\mac-shortcuts.ahk'
 
-    if (Test-Path $regFile) {
-        Write-Info "importing scancode map from $regFile"
-        reg import $regFile
-        Write-Ok 'scancode map imported (sign out/in or reboot for it to take effect)'
+    if (Test-Path $sklFile) {
+        $sharpKeysExe = Find-SharpKeysExe
+        if (-not $sharpKeysExe) {
+            Write-Info 'SharpKeys not found — installing via winget'
+            winget install --id RandyRants.SharpKeys -e --silent --accept-package-agreements --accept-source-agreements
+            $sharpKeysExe = Find-SharpKeysExe
+        }
+
+        if ($sharpKeysExe) {
+            # SharpKeys' Main() takes no arguments, so it can't be told to load
+            # a .skl file on launch — File > Open has to be done by hand.
+            Write-Info "launching SharpKeys ($sharpKeysExe)"
+            Start-Process $sharpKeysExe
+            Write-Host ''
+            Write-Host "In SharpKeys: File > Open, select $sklFile, then click 'Write to Registry'."
+            Write-Host 'Sign out (or reboot) afterward for the remap to take effect.'
+            Write-Host ''
+            Read-Host 'Press Enter once you have written the mapping to the registry to continue'
+        } else {
+            Write-Warn "SharpKeys installed but its Start Menu shortcut could not be found — launch it manually, then File > Open $sklFile and click 'Write to Registry'"
+        }
     } else {
-        Write-Warn 'keyboard\mac-layout.reg not found — export it from SharpKeys, place it here, then re-run: install.ps1 keyboard'
+        Write-Warn 'keyboard\mac-layout.skl not found — save it from SharpKeys (File > Save As), place it here, then re-run: install.ps1 keyboard'
     }
 
     if (Test-Path $ahkFile) {
@@ -191,7 +222,7 @@ Usage:
 
 Commands:
   ssh        generate an SSH key if missing, wait for it to be added to GitHub
-  keyboard   import SharpKeys scancode map + set up AutoHotkey autostart
+  keyboard   launch SharpKeys to load the key list + set up AutoHotkey autostart
   apps       install apps listed in apps/apps.json via winget
   settings   Explorer (extensions/hidden files) + dark mode registry tweaks
   terminal   set Windows Terminal's default profile to WSL Ubuntu

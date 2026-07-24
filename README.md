@@ -30,7 +30,7 @@ Prefer to do it in stages, or re-run a single step?
 ```powershell
 cd ~/windowsconfig
 ./install.ps1 ssh        # generate an SSH key if missing, wait for it to be added to GitHub
-./install.ps1 keyboard   # import SharpKeys scancode map + set up AutoHotkey autostart
+./install.ps1 keyboard   # launch SharpKeys to load the key list + set up AutoHotkey autostart
 ./install.ps1 apps       # install apps listed in apps/apps.json via winget
 ./install.ps1 settings   # Explorer (extensions/hidden files) + dark mode
 ./install.ps1 terminal   # set Windows Terminal's default profile to WSL Ubuntu
@@ -58,17 +58,17 @@ windowsconfig/
 ├── bootstrap.ps1           # entry point for the irm | iex one-liner above
 ├── install.ps1              # installer (ssh | keyboard | apps | settings | terminal | wsl | all | help)
 ├── keyboard/
-│   ├── mac-layout.reg      # SharpKeys scancode map export → imported via `reg import`
+│   ├── mac-layout.skl      # SharpKeys key list → loaded via File > Open, then "Write to Registry"
 │   └── mac-shortcuts.ahk   # AutoHotkey script → autostart shortcut in shell:startup
 └── apps/
     └── apps.json           # winget package IDs, installed by `install.ps1 apps`
 ```
 
-> **Placeholders:** `keyboard/mac-layout.reg` and `keyboard/mac-shortcuts.ahk`
-> aren't in the repo yet — `install.ps1 keyboard` warns and skips cleanly
-> until they're added. `apps/apps.json` currently only lists `git` and
-> `PowerShell 7` as examples; add the rest of your usual apps' winget package
-> IDs (`winget search <name>`) as you go.
+> **Placeholders:** `keyboard/mac-layout.skl` isn't in the repo yet —
+> `install.ps1 keyboard` warns and skips cleanly until it's added.
+> `apps/apps.json` currently only lists `git` and `PowerShell 7` as examples;
+> add the rest of your usual apps' winget package IDs (`winget search <name>`)
+> as you go.
 
 ---
 
@@ -79,10 +79,13 @@ windowsconfig/
 I use a Mac keyboard's physical layout on this Windows machine, so the
 remap has two layers:
 
-- **SharpKeys** (`mac-layout.reg`) — a low-level scancode swap (e.g. Ctrl/Alt
-  physical position), exported from SharpKeys and imported straight into the
-  registry (`HKLM\SYSTEM\CurrentControlSet\Control\Keyboard Layout`) via
-  `reg import`. Takes effect after signing out or rebooting.
+- **SharpKeys** (`mac-layout.skl`) — a low-level scancode swap (e.g. the
+  physical Cmd/Ctrl keys), saved as a SharpKeys key list. SharpKeys has no
+  command-line way to load a `.skl` or write it to the registry, so
+  `install.ps1 keyboard` installs SharpKeys via winget if missing and
+  launches it, but you still do **File > Open** → select `mac-layout.skl` →
+  **Write to Registry** by hand. Takes effect after signing out or
+  rebooting.
 - **AutoHotkey** (`mac-shortcuts.ahk`) — the higher-level shortcut behavior
   SharpKeys can't do alone (e.g. Cmd-style app shortcuts). `install.ps1
   keyboard` installs AutoHotkey via winget if missing and drops a shortcut

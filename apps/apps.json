@@ -6,5 +6,9 @@
   {
     "id": "Microsoft.PowerShell",
     "name": "PowerShell 7"
+  },
+  {
+    "id": "RandyRants.SharpKeys",
+    "name": "SharpKeys"
   }
 ]

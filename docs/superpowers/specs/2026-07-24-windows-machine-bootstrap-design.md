@@ -112,12 +112,15 @@ detected WSL distro — a blind symlink-replace would wipe that out. Instead,
 writing. No `terminal/` directory exists in the repo as a result.
 
 The `keyboard` module also deviates: the user's actual export was a
-SharpKeys `.skl` key list, not a `.reg` registry export, and SharpKeys has no
-command-line way to load a `.skl` or write it to the registry (confirmed by
-reading its source — `Main()` takes no arguments). `install.ps1 keyboard`
-installs SharpKeys via winget if missing and launches it, but loading
-`keyboard/mac-layout.skl` and clicking "Write to Registry" remains a manual
-step.
+SharpKeys `.skl` key list, not a `.reg` registry export. Reading SharpKeys'
+source showed a `.skl` file is literally the raw bytes SharpKeys itself
+writes to the registry's `Scancode Map` value — `SaveMappingsToRegistry()`
+and the `.skl` save handler both serialize the same `DefineScancodeMap()`
+byte array, just to different destinations. So `install.ps1 keyboard` reads
+`keyboard/mac-layout.skl` and writes those bytes directly into
+`HKLM:\SYSTEM\CurrentControlSet\Control\Keyboard Layout` — no SharpKeys GUI
+interaction needed to apply it. SharpKeys is still listed in
+`apps/apps.json` so it's available for designing new mappings later.
 
 ## Out of scope for v1
 

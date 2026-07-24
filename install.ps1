@@ -54,44 +54,26 @@ function Invoke-Ssh {
     Read-Host 'Press Enter once the key has been added to GitHub to continue'
 }
 
-function Find-SharpKeysExe {
-    $searchDirs = @(
-        (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'),
-        (Join-Path $env:AppData 'Microsoft\Windows\Start Menu\Programs')
-    )
-    $shortcut = Get-ChildItem -Path $searchDirs -Recurse -Filter '*SharpKeys*.lnk' -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $shortcut) { return $null }
-
-    $shell = New-Object -ComObject WScript.Shell
-    $link = $shell.CreateShortcut($shortcut.FullName)
-    if (Test-Path $link.TargetPath) { return $link.TargetPath }
-    return $null
-}
-
 function Invoke-Keyboard {
     $sklFile = Join-Path $RepoRoot 'keyboard\mac-layout.skl'
     $ahkFile = Join-Path $RepoRoot 'keyboard\mac-shortcuts.ahk'
+    $keyboardLayoutPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\Keyboard Layout'
 
     if (Test-Path $sklFile) {
-        $sharpKeysExe = Find-SharpKeysExe
-        if (-not $sharpKeysExe) {
-            Write-Info 'SharpKeys not found — installing via winget'
-            winget install --id RandyRants.SharpKeys -e --silent --accept-package-agreements --accept-source-agreements
-            $sharpKeysExe = Find-SharpKeysExe
-        }
+        # A SharpKeys .skl file IS the raw bytes of the registry's "Scancode Map"
+        # value — SharpKeys' own save and write-to-registry code paths both
+        # write the same DefineScancodeMap() byte array, just to different
+        # destinations — so it can be applied directly, no SharpKeys GUI needed.
+        $desiredBytes = [System.IO.File]::ReadAllBytes($sklFile)
+        $desiredHex = [System.BitConverter]::ToString($desiredBytes)
+        $current = Get-ItemProperty -Path $keyboardLayoutPath -Name 'Scancode Map' -ErrorAction SilentlyContinue
+        $currentHex = if ($current) { [System.BitConverter]::ToString($current.'Scancode Map') } else { $null }
 
-        if ($sharpKeysExe) {
-            # SharpKeys' Main() takes no arguments, so it can't be told to load
-            # a .skl file on launch — File > Open has to be done by hand.
-            Write-Info "launching SharpKeys ($sharpKeysExe)"
-            Start-Process $sharpKeysExe
-            Write-Host ''
-            Write-Host "In SharpKeys: File > Open, select $sklFile, then click 'Write to Registry'."
-            Write-Host 'Sign out (or reboot) afterward for the remap to take effect.'
-            Write-Host ''
-            Read-Host 'Press Enter once you have written the mapping to the registry to continue'
+        if ($currentHex -eq $desiredHex) {
+            Write-Ok 'scancode map already applied'
         } else {
-            Write-Warn "SharpKeys installed but its Start Menu shortcut could not be found — launch it manually, then File > Open $sklFile and click 'Write to Registry'"
+            New-ItemProperty -Path $keyboardLayoutPath -Name 'Scancode Map' -PropertyType Binary -Value $desiredBytes -Force | Out-Null
+            Write-Ok 'scancode map written to registry (sign out/in or reboot for it to take effect)'
         }
     } else {
         Write-Warn 'keyboard\mac-layout.skl not found — save it from SharpKeys (File > Save As), place it here, then re-run: install.ps1 keyboard'
@@ -222,7 +204,7 @@ Usage:
 
 Commands:
   ssh        generate an SSH key if missing, wait for it to be added to GitHub
-  keyboard   launch SharpKeys to load the key list + set up AutoHotkey autostart
+  keyboard   apply the SharpKeys scancode map + set up AutoHotkey autostart
   apps       install apps listed in apps/apps.json via winget
   settings   Explorer (extensions/hidden files) + dark mode registry tweaks
   terminal   set Windows Terminal's default profile to WSL Ubuntu

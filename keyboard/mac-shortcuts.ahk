@@ -8,6 +8,17 @@
 ; as a flag for Switching Apps process status
 global isAltTabbing := false
 
+; ADDED: if the script exits or reloads mid-switch (tray Exit, Reload Script),
+; the synthetic Alt below would be left held down. Release it on the way out.
+; Must live in the auto-execute section, above the first hotkey, to register.
+OnExit(ReleaseAltOnExit)
+
+ReleaseAltOnExit(*)
+{
+    EndAltTab()
+    return 0        ; an OnExit callback that returns truthy CANCELS the exit
+}
+
 ;  Switching Apps
 LCtrl & Tab::
 {
@@ -16,19 +27,13 @@ LCtrl & Tab::
     if (!isAltTabbing) {
         isAltTabbing := true
         Send shiftHeld ? "{Alt Down}+{Tab}" : "{Alt Down}{Tab}"   ; <-- ADDED: + when shift held
+        SetTimer(AltTabWatchdog, 250)                   ; <-- ADDED: see EndAltTab() below
     } else {
         Send shiftHeld ? "+{Tab}" : "{Tab}"             ; <-- ADDED: + when shift held
     }
 }
 
-~LCtrl Up::
-{
-    global isAltTabbing
-    if (isAltTabbing) {
-        Send "{Alt Up}"
-        isAltTabbing := false
-    }
-}
+~LCtrl Up::EndAltTab()                                  ; <-- CHANGED: single release path
 
 ; Exception for multitasking view frame
 #HotIf isAltTabbing
@@ -38,13 +43,41 @@ LCtrl & Tab::
     ^Up::Send "{Up}"
     ^Down::Send "{Down}"
 
-    Enter::
+    ; commit the highlighted window (releasing Alt is what alt-tab acts on)
+    Enter::EndAltTab()
+
+    ; ADDED: cancel and stay on the current window. Escape must go out while Alt
+    ; is still held — that is what dismisses the switcher — then release Alt.
+    Escape::
     {
-        global isAltTabbing
-        Send "{Alt Up}"
-        isAltTabbing := false
+        Send "{Escape}"
+        EndAltTab()
     }
 #HotIf
+
+; --- Alt-Tab watchdog (ADDED) ---
+; The switcher above holds a synthetic Alt down between Ctrl+Tab presses and
+; releases it on ~LCtrl Up. If that up-event never arrives — focus stolen by
+; another app, an RDP/VM session grabbing input, the script suspended or
+; reloaded mid-hold — Alt stays logically down forever and every later keypress
+; acts as Alt+key. This timer notices the physical Ctrl is no longer held and
+; cleans up. Every path out of alt-tab funnels through EndAltTab().
+EndAltTab()
+{
+    global isAltTabbing
+    SetTimer(AltTabWatchdog, 0)
+    if (!isAltTabbing)                  ; guard: a lone Alt-up with Alt not down
+        return                          ; would pop the focused window's menu bar
+    isAltTabbing := false
+    Send "{Blind}{Alt Up}"
+}
+
+AltTabWatchdog()
+{
+    global isAltTabbing
+    if (!isAltTabbing || !GetKeyState("LCtrl", "P"))
+        EndAltTab()
+}
 
 ; --- Browser/App Tab Switching ---
 ; Alt + Tab triggers Ctrl + Tab (Next Tab)
@@ -138,8 +171,13 @@ $^Backspace::Send "+{Home}{Backspace}"
     }
 }
 
-!Left::Send "^#{Left}"
-!Right::Send "^#{Right}"
+; REMOVED: Alt+Left/Right = switch virtual desktop (^#{Left} / ^#{Right}).
+; Alt got left logically stuck down. Alt is physically held when the hotkey
+; fires, so AHK releases it to send Ctrl+Win+Arrow and re-presses it after —
+; but the desktop switch changes the foreground window mid-sequence, so the
+; real Alt-up can land on a window that never saw the Alt-down. Windows then
+; treats Alt as held forever (every keypress acts as Alt+key).
+; Use Ctrl+Win+Left/Right (the Windows native binding) directly instead.
 
 
 ; =============================================================================
@@ -149,6 +187,8 @@ $^Backspace::Send "+{Home}{Backspace}"
 ; --- Pause / resume the whole script (gaming, RDP, VM safety net) ---
 ; Ctrl + Shift + Pause
 ^+Pause::{
+    EndAltTab()                         ; <-- ADDED: suspending stops ~LCtrl Up from
+                                        ;     firing, which would strand Alt down
     Suspend(-1)
     TrayTip(A_IsSuspended ? "macOS keys: PAUSED" : "macOS keys: ACTIVE", "AutoHotkey", 1)
 }
